@@ -1,0 +1,151 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "logAnalyticsWorkspaceName": {
+            "defaultValue": "dnliSentinelInstance",
+            "type": "String",
+            "metadata": {
+                "description": "Workspace name for Log Analytics where Microsoft Sentinel is setup"
+            }
+        },
+        "connectorResourceName": {
+            "defaultValue": "[newGuid()]",
+            "type": "String",
+            "metadata": {
+                "description": "Resource name for connector"
+            }
+        }
+    },
+    "variables": {},
+    "functions": [],
+    "resources": [
+        {
+            "type": "Microsoft.OperationalInsights/workspaces/providers/dataConnectors",
+            "apiVersion": "2021-03-01-preview",
+            "name": "[concat(parameters('logAnalyticsWorkspaceName'),'/Microsoft.SecurityInsights/', parameters('connectorResourceName'))]",
+            "location": "[resourceGroup().location]",
+            "dependsOn": [],
+            "kind": "APIPolling",
+            "properties": {
+                "connectorUiConfig": {
+                    "id": "VerkadaAudit",
+                    "title": "Verkada Audit",
+                    "publisher": "Denali Therapeutics",
+                    "descriptionMarkdown": "The [Verkada](https://www.verkada.com) data connector integrates and sources Verkada's [audit logs](https://apidocs.verkada.com/reference/getauditlogsviewv1) into Microsoft Sentinel. The API returns audit logs for an organization within a specified time range. All audit logs include a timestamp in ISO 8601 date time format, user info, IP address, event info and device information.",
+                    "graphQueriesTableName": "Verkada_Audit_CCP_CL",
+                    "graphQueries": [
+                        {
+                            "metricName": "Total data received",
+                            "legend": "Verkada audit events",
+                            "baseQuery": "{{graphQueriesTableName}}"
+                        }
+                    ],
+                    "sampleQueries": [
+                        {
+                            "description": "All Verkada audit events",
+                            "query": "{{graphQueriesTableName}}\n| sort by TimeGenerated desc"
+                        }
+                    ],
+                    "dataTypes": [
+                        {
+                            "name": "{{graphQueriesTableName}}",
+                            "lastDataReceivedQuery": "{{graphQueriesTableName}}\n| summarize Time = max(TimeGenerated)\n| where isnotempty(Time)"
+                        }
+                    ],
+                    "connectivityCriteria": [
+                        {
+                            "type": "SentinelKindsV2",
+                            "value": []
+                        }
+                    ],
+                    "availability": {
+                        "status": 1,
+                        "isPreview": true
+                    },
+                    "permissions": {
+                        "resourceProvider": [
+                            {
+                                "provider": "Microsoft.OperationalInsights/workspaces",
+                                "permissionsDisplayText": "read and write permissions are required.",
+                                "providerDisplayName": "Workspace",
+                                "scope": "Workspace",
+                                "requiredPermissions": {
+                                    "write": true,
+                                    "read": true,
+                                    "delete": true
+                                }
+                            },
+                            {
+                                "provider": "Microsoft.OperationalInsights/workspaces/sharedKeys",
+                                "permissionsDisplayText": "read permissions to shared keys for the workspace are required. [See the documentation to learn more about workspace keys](https://docs.microsoft.com/azure/azure-monitor/platform/agent-windows#obtain-workspace-id-and-key)",
+                                "providerDisplayName": "Keys",
+                                "scope": "Workspace",
+                                "requiredPermissions": {
+                                    "action": true
+                                }
+                            }
+                        ],
+                        "customs": [
+                            {
+                                "name": "Verkada API credentials",
+                                "description": "A Verkada Organization ID and API key is required. [See the documentation to learn more about Verkada's API](https://apidocs.verkada.com/reference/authentication)."
+                            }
+                        ]
+                    },
+                    "instructionSteps": [
+                        {
+                            "title": "Connect Verkada to Microsoft Sentinel",
+                            "description": "Enable Verkada audit Logs.",
+                            "instructions": [
+                                {
+                                    "parameters": {
+                                        "enable": "true",
+                                        "userRequestPlaceHoldersInput": [
+                                            {
+                                                "displayText": "Organization ID",
+                                                "requestObjectKey": "queryParameters.org_id",
+                                                "placeHolderName": "{{org_id}}",
+                                                "placeHolderValue": ""
+                                            }
+                                        ]
+                                    },
+                                    "type": "APIKey"
+                                }
+                            ]
+                        }
+                    ]
+                },
+                "pollingConfig": {
+                    "auth": {
+                        "authType": "APIKey",
+                        "APIKeyName": "x-api-key"
+                    },
+                    "request": {
+                        "apiEndpoint": "https://api.verkada.com/core/v1/audit_log",
+                        "httpMethod": "Get",
+                        "queryTimeFormat": "UnixTimestamp",
+                        "startTimeAttributeName": "start_time",
+                        "endTimeAttributeName": "end_time",
+                        "queryWindowInMin": 5,
+                        "queryParameters": {
+                            "org_id": "{{org_id}}",
+                            "limit": 100
+                        }
+                    },
+                    "paging": {
+                        "pagingType": "PageToken",
+                        "nextPageParaName": "next_page_token",
+                        "nextPageTokenJsonPath": "$.next_page_token"
+                    },
+                    "response": {
+                        "eventsJsonPaths": [
+                            "$.audit_logs"
+                        ]
+                    }
+                }
+            }
+        }
+    ],
+    "outputs": {}
+}
